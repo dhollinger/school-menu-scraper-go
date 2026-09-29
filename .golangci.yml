@@ -1,0 +1,7 @@
+version: "2"
+linters:
+  settings:
+    errcheck:
+      # Exclude checking Close error on types that implement io.Closer
+      exclude-functions:
+        - (*net/http.Response).Body.Close
