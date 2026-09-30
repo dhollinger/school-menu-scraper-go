@@ -1,0 +1,13 @@
+menu_api_url: "http://menu-api.test/api/CalendarView/GetDailyMenuitemsByGrade"
+schools:
+  - name: "Test Elementary"
+    school_id: "11111111-1111-1111-1111-111111111111"
+  - name: "Another Test Elementary"
+    school_id: "22222222-2222-2222-2222-222222222222"
+serving_line: "Test Serving Line"
+meal_type: "Test Meal Type"
+grade: "05"
+person_id: "null"
+textbelt_phone: "5555555555"
+textbelt_key: "test-api-key"
+date: "09/29/2026"

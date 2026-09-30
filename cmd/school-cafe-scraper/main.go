@@ -2,93 +2,69 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/dhollinger/school-menu-scraper-go/internal/config"
 )
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 func main() {
+	configPath := flag.String("config", "", "path to the config file")
+	flag.Parse()
+
+	config.Init(configPath)
+
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func run() error {
-	cfg := loadConfig()
+	cfg := config.GetConfig()
 
-	body, err := getMenu(cfg)
-	if err != nil {
-		return fmt.Errorf("getting menu: %w", err)
+	for _, school := range cfg.Schools {
+
+		body, err := getMenu(cfg, school.Name, school.SchoolID)
+		if err != nil {
+			return fmt.Errorf("getting menu: %w", err)
+		}
+
+		menu, err := parseBody(body)
+		if err != nil {
+			return fmt.Errorf("parsing menu: %w", err)
+		}
+
+		entrees := getEntrees(menu)
+
+		if err := sendMessage(cfg, school.Name, entrees); err != nil {
+			return fmt.Errorf("sending message: %w", err)
+		}
+
 	}
-
-	menu, err := parseBody(body)
-	if err != nil {
-		return fmt.Errorf("parsing menu: %w", err)
-	}
-
-	entrees := getEntrees(menu)
-
-	if err := sendMessage(cfg, entrees); err != nil {
-		return fmt.Errorf("sending message: %w", err)
-	}
-
 	return nil
 }
 
-type config struct {
-	menuAPIURL    string
-	schoolID      string
-	servingLine   string
-	mealType      string
-	grade         string
-	personID      string
-	textbeltPhone string
-	textbeltKey   string
-	today         string
-}
-
-func loadConfig() config {
-	return config{
-		menuAPIURL:    mustEnv("MENU_API_URL"),
-		schoolID:      mustEnv("SCHOOL_ID"),
-		servingLine:   mustEnv("SERVING_LINE"),
-		mealType:      mustEnv("MEAL_TYPE"),
-		grade:         mustEnv("GRADE"),
-		personID:      mustEnv("PERSON_ID"),
-		textbeltPhone: mustEnv("TEXTBELT_PHONE"),
-		textbeltKey:   os.Getenv("TEXTBELT"),
-		today:         time.Now().Format("01/02/2006"),
-	}
-}
-
-func mustEnv(key string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		log.Fatalf("missing required environment variable: %s", key)
-	}
-	return value
-}
-
-func getMenu(cfg config) (string, error) {
-	baseURL, err := url.Parse(cfg.menuAPIURL)
+func getMenu(cfg config.Config, school, id string) (string, error) {
+	baseURL, err := url.Parse(cfg.MenuAPIURL)
 	if err != nil {
 		return "", fmt.Errorf("parsing base URL: %w", err)
 	}
 
 	params := url.Values{}
-	params.Add("SchoolId", cfg.schoolID)
-	params.Add("ServingDate", cfg.today)
-	params.Add("ServingLine", cfg.servingLine)
-	params.Add("MealType", cfg.mealType)
-	params.Add("Grade", cfg.grade)
-	params.Add("PersonId", cfg.personID)
+	params.Add("SchoolId", id)
+	params.Add("ServingDate", cfg.Date)
+	params.Add("ServingLine", cfg.ServingLine)
+	params.Add("MealType", cfg.MealType)
+	params.Add("Grade", cfg.Grade)
+	params.Add("PersonId", cfg.PersonID)
 
 	baseURL.RawQuery = params.Encode()
 
@@ -132,14 +108,14 @@ func getEntrees(menu []map[string]any) []string {
 	return entrees
 }
 
-func sendMessage(cfg config, entrees []string) error {
+func sendMessage(cfg config.Config, school string, entrees []string) error {
 	entreeList := strings.Join(entrees, "\n")
-	msgBody := fmt.Sprintf("Entrees for %s at Standing Bear Elementary:\n\n%s", cfg.today, entreeList)
+	msgBody := fmt.Sprintf("Entrees for %s at %s:\n\n%s", cfg.Date, school, entreeList)
 
 	params := url.Values{}
-	params.Add("phone", cfg.textbeltPhone)
+	params.Add("phone", cfg.TextbeltPhone)
 	params.Add("message", msgBody)
-	params.Add("key", cfg.textbeltKey)
+	params.Add("key", cfg.TextbeltKey)
 
 	_, err := httpClient.PostForm("https://textbelt.com/text", params)
 	if err != nil {

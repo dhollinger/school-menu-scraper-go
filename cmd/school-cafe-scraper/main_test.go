@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dhollinger/school-menu-scraper-go/internal/config"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -34,10 +38,10 @@ func stubHTTPClient(t *testing.T, rt http.RoundTripper) {
 	t.Cleanup(func() { httpClient = orig })
 }
 
-func interceptTextbelt(t *testing.T, next http.RoundTripper) *url.Values {
+func interceptTextbelt(t *testing.T, next http.RoundTripper) *[]url.Values {
 	t.Helper()
 
-	var form url.Values
+	var posts []url.Values
 
 	stubHTTPClient(t, roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		if req.URL.Host != "textbelt.com" {
@@ -49,10 +53,12 @@ func interceptTextbelt(t *testing.T, next http.RoundTripper) *url.Values {
 			return nil, err
 		}
 
-		form, err = url.ParseQuery(string(body))
+		form, err := url.ParseQuery(string(body))
 		if err != nil {
 			return nil, err
 		}
+
+		posts = append(posts, form)
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -63,7 +69,7 @@ func interceptTextbelt(t *testing.T, next http.RoundTripper) *url.Values {
 		}, nil
 	}))
 
-	return &form
+	return &posts
 }
 
 func TestGetEntrees(t *testing.T) {
@@ -126,15 +132,14 @@ func TestParseBody(t *testing.T) {
 }
 
 func TestGetMenu(t *testing.T) {
-	newConfig := func(menuAPIURL string) config {
-		return config{
-			menuAPIURL:  menuAPIURL,
-			schoolID:    "school-id",
-			servingLine: "Specials of the Day",
-			mealType:    "Lunch",
-			grade:       "04",
-			personID:    "null",
-			today:       "09/29/2026",
+	newConfig := func(menuAPIURL string) config.Config {
+		return config.Config{
+			MenuAPIURL:  menuAPIURL,
+			ServingLine: "Specials of the Day",
+			MealType:    "Lunch",
+			Grade:       "04",
+			PersonID:    "null",
+			Date:        "09/29/2026",
 		}
 	}
 
@@ -147,7 +152,7 @@ func TestGetMenu(t *testing.T) {
 				key  string
 				want string
 			}{
-				{"SchoolId", "school-id"},
+				{"SchoolId", "test-school-id"},
 				{"ServingDate", "09/29/2026"},
 				{"ServingLine", "Specials of the Day"},
 				{"MealType", "Lunch"},
@@ -162,7 +167,7 @@ func TestGetMenu(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		got, err := getMenu(newConfig(srv.URL))
+		got, err := getMenu(newConfig(srv.URL), "Test Elementary", "test-school-id")
 		if err != nil {
 			t.Fatalf("getMenu() error = %v, want nil", err)
 		}
@@ -172,14 +177,14 @@ func TestGetMenu(t *testing.T) {
 	})
 
 	t.Run("invalid URL", func(t *testing.T) {
-		_, err := getMenu(newConfig("http://[::1"))
+		_, err := getMenu(newConfig("http://[::1"), "Test Elementary", "test-school-id")
 		if err == nil || !strings.Contains(err.Error(), "parsing base URL") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "parsing base URL")
 		}
 	})
 
 	t.Run("request failure", func(t *testing.T) {
-		_, err := getMenu(newConfig("http://127.0.0.1:1"))
+		_, err := getMenu(newConfig("http://127.0.0.1:1"), "Test Elementary", "test-school-id")
 		if err == nil || !strings.Contains(err.Error(), "making request") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "making request")
 		}
@@ -196,7 +201,7 @@ func TestGetMenu(t *testing.T) {
 			}, nil
 		}))
 
-		_, err := getMenu(newConfig("http://stub.invalid"))
+		_, err := getMenu(newConfig("http://stub.invalid"), "Test Elementary", "test-school-id")
 		if err == nil || !strings.Contains(err.Error(), "reading body") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "reading body")
 		}
@@ -204,23 +209,28 @@ func TestGetMenu(t *testing.T) {
 }
 
 func TestSendMessage(t *testing.T) {
-	cfg := config{
-		textbeltPhone: "5550000000",
-		textbeltKey:   "test-key",
-		today:         "09/29/2026",
+	cfg := config.Config{
+		TextbeltPhone: "5550000000",
+		TextbeltKey:   "test-key",
+		Date:          "09/29/2026",
 	}
 	entrees := []string{"Cheese Pizza", "Orange Chicken"}
 
 	t.Run("success", func(t *testing.T) {
-		form := interceptTextbelt(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		posts := interceptTextbelt(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
 			return nil, errors.New("unexpected request")
 		}))
 
-		if err := sendMessage(cfg, entrees); err != nil {
+		if err := sendMessage(cfg, "Test Elementary", entrees); err != nil {
 			t.Fatalf("sendMessage() error = %v, want nil", err)
 		}
 
-		wantMsg := "Entrees for 09/29/2026 at Standing Bear Elementary:\n\nCheese Pizza\nOrange Chicken"
+		if len(*posts) != 1 {
+			t.Fatalf("textbelt posts = %d, want 1", len(*posts))
+		}
+
+		form := (*posts)[0]
+		wantMsg := "Entrees for 09/29/2026 at Test Elementary:\n\nCheese Pizza\nOrange Chicken"
 		if form.Get("phone") != "5550000000" {
 			t.Errorf("phone = %q, want %q", form.Get("phone"), "5550000000")
 		}
@@ -237,49 +247,14 @@ func TestSendMessage(t *testing.T) {
 			return nil, errors.New("boom")
 		}))
 
-		err := sendMessage(cfg, entrees)
+		err := sendMessage(cfg, "Test Elementary", entrees)
 		if err == nil || !strings.Contains(err.Error(), "submitting form") {
 			t.Errorf("sendMessage() error = %v, want it to contain %q", err, "submitting form")
 		}
 	})
 }
 
-func TestLoadConfig(t *testing.T) {
-	t.Setenv("MENU_API_URL", "http://example.com/menu")
-	t.Setenv("SCHOOL_ID", "school-id")
-	t.Setenv("SERVING_LINE", "Specials of the Day")
-	t.Setenv("MEAL_TYPE", "Lunch")
-	t.Setenv("GRADE", "04")
-	t.Setenv("PERSON_ID", "null")
-	t.Setenv("TEXTBELT_PHONE", "5550000000")
-	t.Setenv("TEXTBELT", "test-key")
-
-	cfg := loadConfig()
-
-	want := config{
-		menuAPIURL:    "http://example.com/menu",
-		schoolID:      "school-id",
-		servingLine:   "Specials of the Day",
-		mealType:      "Lunch",
-		grade:         "04",
-		personID:      "null",
-		textbeltPhone: "5550000000",
-		textbeltKey:   "test-key",
-	}
-	if cfg.menuAPIURL != want.menuAPIURL ||
-		cfg.schoolID != want.schoolID ||
-		cfg.servingLine != want.servingLine ||
-		cfg.mealType != want.mealType ||
-		cfg.grade != want.grade ||
-		cfg.personID != want.personID ||
-		cfg.textbeltPhone != want.textbeltPhone ||
-		cfg.textbeltKey != want.textbeltKey {
-		t.Errorf("loadConfig() = %+v, want %+v", cfg, want)
-	}
-	if _, err := time.Parse("01/02/2006", cfg.today); err != nil {
-		t.Errorf("today = %q, want a date formatted as MM/DD/YYYY", cfg.today)
-	}
-}
+const testMenuAPIURL = "http://menu-api.test/api/CalendarView/GetDailyMenuitemsByGrade"
 
 func TestRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -288,30 +263,46 @@ func TestRun(t *testing.T) {
 	defer srv.Close()
 
 	t.Setenv("MENU_API_URL", srv.URL)
-	t.Setenv("SCHOOL_ID", "school-id")
-	t.Setenv("SERVING_LINE", "Specials of the Day")
-	t.Setenv("MEAL_TYPE", "Lunch")
 	t.Setenv("GRADE", "04")
-	t.Setenv("PERSON_ID", "null")
 	t.Setenv("TEXTBELT_PHONE", "5550000000")
 	t.Setenv("TEXTBELT", "test-key")
 
-	form := interceptTextbelt(t, http.DefaultTransport)
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "menufy.yml"))
+	if err != nil {
+		t.Fatalf("reading test config fixture: %v", err)
+	}
+
+	configYAML := strings.ReplaceAll(string(fixture), testMenuAPIURL, srv.URL)
+
+	path := filepath.Join(t.TempDir(), "menufy.yml")
+	if err := os.WriteFile(path, []byte(configYAML), 0o600); err != nil {
+		t.Fatalf("writing config file: %v", err)
+	}
+
+	config.Init(&path)
+
+	posts := interceptTextbelt(t, http.DefaultTransport)
 
 	if err := run(); err != nil {
 		t.Fatalf("run() error = %v, want nil", err)
 	}
 
-	if form.Get("phone") != "5550000000" {
-		t.Errorf("phone = %q, want %q", form.Get("phone"), "5550000000")
+	if len(*posts) != 2 {
+		t.Fatalf("textbelt posts = %d, want 2", len(*posts))
 	}
-	if form.Get("key") != "test-key" {
-		t.Errorf("key = %q, want %q", form.Get("key"), "test-key")
-	}
-	msg := form.Get("message")
-	for _, want := range []string{"Entrees for ", "at Standing Bear Elementary", "Cheese Pizza", "Orange Chicken"} {
-		if !strings.Contains(msg, want) {
-			t.Errorf("message = %q, want it to contain %q", msg, want)
+
+	schools := []string{"Test Elementary", "Another Test Elementary"}
+	for i, school := range schools {
+		form := (*posts)[i]
+		if form.Get("phone") != "5555555555" {
+			t.Errorf("phone = %q, want %q", form.Get("phone"), "5555555555")
+		}
+		if form.Get("key") != "test-api-key" {
+			t.Errorf("key = %q, want %q", form.Get("key"), "test-api-key")
+		}
+		wantMsg := fmt.Sprintf("Entrees for 09/29/2026 at %s:\n\nCheese Pizza\nOrange Chicken", school)
+		if form.Get("message") != wantMsg {
+			t.Errorf("message = %q, want %q", form.Get("message"), wantMsg)
 		}
 	}
 }
