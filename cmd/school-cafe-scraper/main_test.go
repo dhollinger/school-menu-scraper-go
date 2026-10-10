@@ -137,7 +137,6 @@ func TestGetMenu(t *testing.T) {
 			MenuAPIURL:  menuAPIURL,
 			ServingLine: "Specials of the Day",
 			MealType:    "Lunch",
-			Grade:       "04",
 			PersonID:    "null",
 			Date:        "09/29/2026",
 		}
@@ -156,7 +155,6 @@ func TestGetMenu(t *testing.T) {
 				{"ServingDate", "09/29/2026"},
 				{"ServingLine", "Specials of the Day"},
 				{"MealType", "Lunch"},
-				{"Grade", "04"},
 				{"PersonId", "null"},
 			} {
 				if got := query.Get(tc.key); got != tc.want {
@@ -167,7 +165,7 @@ func TestGetMenu(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		got, err := getMenu(newConfig(srv.URL), "Test Elementary", "test-school-id")
+		got, err := getMenu(newConfig(srv.URL), "Test Elementary", "test-school-id", "04")
 		if err != nil {
 			t.Fatalf("getMenu() error = %v, want nil", err)
 		}
@@ -177,14 +175,14 @@ func TestGetMenu(t *testing.T) {
 	})
 
 	t.Run("invalid URL", func(t *testing.T) {
-		_, err := getMenu(newConfig("http://[::1"), "Test Elementary", "test-school-id")
+		_, err := getMenu(newConfig("http://[::1"), "Test Elementary", "test-school-id", "04")
 		if err == nil || !strings.Contains(err.Error(), "parsing base URL") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "parsing base URL")
 		}
 	})
 
 	t.Run("request failure", func(t *testing.T) {
-		_, err := getMenu(newConfig("http://127.0.0.1:1"), "Test Elementary", "test-school-id")
+		_, err := getMenu(newConfig("http://127.0.0.1:1"), "Test Elementary", "test-school-id", "04")
 		if err == nil || !strings.Contains(err.Error(), "making request") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "making request")
 		}
@@ -201,7 +199,7 @@ func TestGetMenu(t *testing.T) {
 			}, nil
 		}))
 
-		_, err := getMenu(newConfig("http://stub.invalid"), "Test Elementary", "test-school-id")
+		_, err := getMenu(newConfig("http://stub.invalid"), "Test Elementary", "test-school-id", "04")
 		if err == nil || !strings.Contains(err.Error(), "reading body") {
 			t.Errorf("getMenu() error = %v, want it to contain %q", err, "reading body")
 		}

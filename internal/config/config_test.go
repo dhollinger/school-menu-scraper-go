@@ -11,7 +11,6 @@ func setRequiredEnv(t *testing.T) {
 	t.Helper()
 
 	t.Setenv("MENU_API_URL", "http://from-env/menu")
-	t.Setenv("GRADE", "04")
 	t.Setenv("TEXTBELT_PHONE", "5550000000")
 	t.Setenv("TEXTBELT", "env-key")
 }
@@ -42,20 +41,17 @@ func TestInitExplicitPath(t *testing.T) {
 	if len(cfg.Schools) != 2 {
 		t.Fatalf("Schools = %+v, want 2 schools", cfg.Schools)
 	}
-	if cfg.Schools[0].Name != "Test Elementary" || cfg.Schools[0].SchoolID != "11111111-1111-1111-1111-111111111111" {
-		t.Errorf("Schools[0] = %+v, want name %q and id %q", cfg.Schools[0], "Test Elementary", "11111111-1111-1111-1111-111111111111")
+	if cfg.Schools[0].Name != "Test Elementary" || cfg.Schools[0].SchoolID != "11111111-1111-1111-1111-111111111111" || cfg.Schools[0].Grade != "04" {
+		t.Errorf("Schools[0] = %+v, want name %q, id %q, and grade %q", cfg.Schools[0], "Test Elementary", "11111111-1111-1111-1111-111111111111", "04")
 	}
-	if cfg.Schools[1].Name != "Another Test Elementary" || cfg.Schools[1].SchoolID != "22222222-2222-2222-2222-222222222222" {
-		t.Errorf("Schools[1] = %+v, want name %q and id %q", cfg.Schools[1], "Another Test Elementary", "22222222-2222-2222-2222-222222222222")
+	if cfg.Schools[1].Name != "Another Test Elementary" || cfg.Schools[1].SchoolID != "22222222-2222-2222-2222-222222222222" || cfg.Schools[1].Grade != "06" {
+		t.Errorf("Schools[1] = %+v, want name %q, id %q, and grade %q", cfg.Schools[1], "Another Test Elementary", "22222222-2222-2222-2222-222222222222", "06")
 	}
 	if cfg.ServingLine != "Test Serving Line" {
 		t.Errorf("ServingLine = %q, want %q", cfg.ServingLine, "Test Serving Line")
 	}
 	if cfg.MealType != "Test Meal Type" {
 		t.Errorf("MealType = %q, want %q", cfg.MealType, "Test Meal Type")
-	}
-	if cfg.Grade != "05" {
-		t.Errorf("Grade = %q, want %q", cfg.Grade, "05")
 	}
 	if cfg.PersonID != "null" {
 		t.Errorf("PersonID = %q, want %q", cfg.PersonID, "null")
@@ -79,7 +75,7 @@ func TestInitDefaultPath(t *testing.T) {
 schools:
   - name: "Test Elementary"
     school_id: "test-school-id"
-grade: "05"
+    grade: "04"
 `)
 
 	t.Chdir(dir)
@@ -94,11 +90,8 @@ grade: "05"
 	if len(cfg.Schools) != 1 {
 		t.Fatalf("Schools = %+v, want 1 school", cfg.Schools)
 	}
-	if cfg.Schools[0].Name != "Test Elementary" || cfg.Schools[0].SchoolID != "test-school-id" {
-		t.Errorf("Schools[0] = %+v, want name %q and id %q", cfg.Schools[0], "Test Elementary", "test-school-id")
-	}
-	if cfg.Grade != "05" {
-		t.Errorf("Grade = %q, want %q", cfg.Grade, "05")
+	if cfg.Schools[0].Name != "Test Elementary" || cfg.Schools[0].SchoolID != "test-school-id" || cfg.Schools[0].Grade != "04" {
+		t.Errorf("Schools[0] = %+v, want name %q, id %q, and grade %q", cfg.Schools[0], "Test Elementary", "test-school-id", "04")
 	}
 	if cfg.ServingLine != "Specials of the Day" {
 		t.Errorf("ServingLine = %q, want %q", cfg.ServingLine, "Specials of the Day")
@@ -158,9 +151,6 @@ func TestInitEnvDefaults(t *testing.T) {
 	}
 	if len(cfg.Schools) != 0 {
 		t.Errorf("Schools = %+v, want none", cfg.Schools)
-	}
-	if cfg.Grade != "04" {
-		t.Errorf("Grade = %q, want %q", cfg.Grade, "04")
 	}
 	if cfg.TextbeltPhone != "5550000000" {
 		t.Errorf("TextbeltPhone = %q, want %q", cfg.TextbeltPhone, "5550000000")

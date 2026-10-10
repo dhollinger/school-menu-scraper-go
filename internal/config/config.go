@@ -15,10 +15,10 @@ type Config struct {
 	Schools    []struct {
 		Name     string `mapstructure:"name"`
 		SchoolID string `mapstructure:"school_id"`
+		Grade    string `mapstructure:"grade"`
 	} `mapstructure:"schools"`
 	ServingLine   string `mapstructure:"serving_line"`
 	MealType      string `mapstructure:"meal_type"`
-	Grade         string `mapstructure:"grade"`
 	PersonID      string `mapstructure:"person_id"`
 	TextbeltPhone string `mapstructure:"textbelt_phone"`
 	TextbeltKey   string `mapstructure:"textbelt_key"`
@@ -56,7 +56,6 @@ func setDefaults(v *viper.Viper) *viper.Viper {
 	v.SetDefault("menu_api_url", mustEnv("MENU_API_URL"))
 	v.SetDefault("serving_line", "Specials of the Day")
 	v.SetDefault("meal_type", "Lunch")
-	v.SetDefault("grade", mustEnv("GRADE"))
 	v.SetDefault("person_id", "null")
 	v.SetDefault("textbelt_phone", mustEnv("TEXTBELT_PHONE"))
 	v.SetDefault("textbelt_key", mustEnv("TEXTBELT"))

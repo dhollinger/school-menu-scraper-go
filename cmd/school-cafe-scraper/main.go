@@ -32,7 +32,7 @@ func run() error {
 
 	for _, school := range cfg.Schools {
 
-		body, err := getMenu(cfg, school.Name, school.SchoolID)
+		body, err := getMenu(cfg, school.Name, school.SchoolID, school.Grade)
 		if err != nil {
 			return fmt.Errorf("getting menu: %w", err)
 		}
@@ -52,7 +52,7 @@ func run() error {
 	return nil
 }
 
-func getMenu(cfg config.Config, school, id string) (string, error) {
+func getMenu(cfg config.Config, school, id, grade string) (string, error) {
 	baseURL, err := url.Parse(cfg.MenuAPIURL)
 	if err != nil {
 		return "", fmt.Errorf("parsing base URL: %w", err)
@@ -63,7 +63,7 @@ func getMenu(cfg config.Config, school, id string) (string, error) {
 	params.Add("ServingDate", cfg.Date)
 	params.Add("ServingLine", cfg.ServingLine)
 	params.Add("MealType", cfg.MealType)
-	params.Add("Grade", cfg.Grade)
+	params.Add("Grade", grade)
 	params.Add("PersonId", cfg.PersonID)
 
 	baseURL.RawQuery = params.Encode()
